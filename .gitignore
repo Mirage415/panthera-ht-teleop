@@ -1,0 +1,14 @@
+.venv/
+.runtime/
+__pycache__/
+*.pyc
+calibration/
+teleop-config.json
+99-panthera-local.rules
+usb-arm-mapping.json
+port-probe.json
+wheel-inspect/
+install-uv.sh
+just.tar.gz
+.env
+.env.*

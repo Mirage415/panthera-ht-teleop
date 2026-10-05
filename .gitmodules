@@ -1,0 +1,3 @@
+[submodule "Panthera-HT_SDK"]
+	path = Panthera-HT_SDK
+	url = https://github.com/HighTorque-Robotics/Panthera-HT_SDK.git

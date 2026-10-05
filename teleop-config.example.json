@@ -1,0 +1,52 @@
+{
+  "leader": "/dev/serial/by-path/REPLACE_WITH_LEADER_CAN_PATH",
+  "follower": "/dev/serial/by-path/REPLACE_WITH_FOLLOWER_CAN_PATH",
+  "frequency_hz": 100,
+  "motor_timeout_ms": 250,
+  "state_timeout_s": 0.2,
+  "max_target_speed_rad_s": 1.5,
+  "max_tracking_error_rad": 0.6,
+  "joint_kp": [
+    10.0,
+    21.0,
+    21.0,
+    16.0,
+    13.0,
+    1.0
+  ],
+  "joint_kd": [
+    1.0,
+    2.0,
+    2.0,
+    0.9,
+    0.8,
+    0.1
+  ],
+  "torque_limits_nm": [
+    15.0,
+    30.0,
+    30.0,
+    15.0,
+    5.0,
+    5.0
+  ],
+  "leader_kd": [
+    0.4,
+    0.25,
+    0.25,
+    0.1,
+    0.06,
+    0.04
+  ],
+  "velocity_feedforward_gain": 0.5,
+  "velocity_filter_time_s": 0.04,
+  "gripper_max_target_speed_rad_s": 4.0,
+  "leader_gravity_scale": [
+    1.0,
+    1.0,
+    0.95,
+    0.9,
+    1.0,
+    1.0
+  ]
+}
