@@ -1,5 +1,9 @@
 .venv/
+.venv-lerobot/
+lerobot-export/
 .runtime/
+recordings/
+hf-config.json
 __pycache__/
 *.pyc
 calibration/

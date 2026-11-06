@@ -1,0 +1,6 @@
+{
+  "enabled": false,
+  "repo_id": "YOUR_USERNAME/panthera-teleop",
+  "format": "lerobot",
+  "task": "Panthera teleoperation"
+}

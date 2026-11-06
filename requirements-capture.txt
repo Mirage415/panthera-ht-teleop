@@ -1,0 +1,8 @@
+# Install alongside requirements.lock.txt; keep NumPy compatible with the robot SDK.
+numpy==1.26.4
+foxglove-sdk==0.29.0
+pyrealsense2==2.58.4.10922
+opencv-python-headless==4.11.0.86
+mcap==1.5.0
+
+huggingface-hub==2.2.0

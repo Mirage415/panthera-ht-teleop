@@ -50,6 +50,9 @@ class FakeArm:
 
 class TeleopTests(unittest.TestCase):
     def setUp(self):
+        publisher = patch.object(teleop, 'Publisher')
+        publisher.start()
+        self.addCleanup(publisher.stop)
         self.cfg = json.loads((teleop.ROOT / 'teleop-config.example.json').read_text())
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

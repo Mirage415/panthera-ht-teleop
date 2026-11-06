@@ -29,3 +29,14 @@ GravityObserve:
 
 Test:
     @"{{justfile_directory()}}/.venv/bin/python" -m unittest -v
+
+# 启动预览服务，可在 Foxglove 页面开始/停止采集，不启动机械臂
+Preview *args:
+    @"{{justfile_directory()}}/.venv/bin/python" -u "{{justfile_directory()}}/capture.py" --preview "$@"
+
+# 采集 RGB + follower 关节角；另一个终端运行 Teleop
+Capture *args:
+    @"{{justfile_directory()}}/.venv/bin/python" -u "{{justfile_directory()}}/capture.py" "$@"
+
+# 常驻 Foxglove 预览与页面采集服务
+alias Foxglove := Preview

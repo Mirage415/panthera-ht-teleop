@@ -1,0 +1,72 @@
+{
+  "paths": [
+    {
+      "enabled": true,
+      "color": "#4c9aff",
+      "label": "Joint 1",
+      "showLine": true,
+      "value": "/follower/joint_states.position[0]",
+      "timestampMethod": "receiveTime"
+    },
+    {
+      "enabled": true,
+      "color": "#ff8b52",
+      "label": "Joint 2",
+      "showLine": true,
+      "value": "/follower/joint_states.position[1]",
+      "timestampMethod": "receiveTime"
+    },
+    {
+      "enabled": true,
+      "color": "#56d6a0",
+      "label": "Joint 3",
+      "showLine": true,
+      "value": "/follower/joint_states.position[2]",
+      "timestampMethod": "receiveTime"
+    },
+    {
+      "enabled": true,
+      "color": "#bf8bff",
+      "label": "Joint 4",
+      "showLine": true,
+      "value": "/follower/joint_states.position[3]",
+      "timestampMethod": "receiveTime"
+    },
+    {
+      "enabled": true,
+      "color": "#ffd166",
+      "label": "Joint 5",
+      "showLine": true,
+      "value": "/follower/joint_states.position[4]",
+      "timestampMethod": "receiveTime"
+    },
+    {
+      "enabled": true,
+      "color": "#ee6c9e",
+      "label": "Joint 6",
+      "showLine": true,
+      "value": "/follower/joint_states.position[5]",
+      "timestampMethod": "receiveTime"
+    },
+    {
+      "enabled": true,
+      "color": "#a4b2c5",
+      "label": "Gripper",
+      "showLine": true,
+      "value": "/follower/joint_states.position[6]",
+      "timestampMethod": "receiveTime"
+    }
+  ],
+  "showLegend": true,
+  "legendDisplay": "top",
+  "showPlotValuesInLegend": true,
+  "showXAxisLabels": true,
+  "showYAxisLabels": true,
+  "xAxisVal": "timestamp",
+  "timeRange": "latest",
+  "xAxisLabel": "Time",
+  "timeWindowMode": "sliding",
+  "yAxisLabel": "Angle (rad)",
+  "followingViewWidth": 20,
+  "showYAxisGridLines": true
+}

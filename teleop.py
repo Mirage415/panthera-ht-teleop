@@ -18,6 +18,7 @@ import numpy as np
 import yaml
 
 from probe_ports import query
+from telemetry import Publisher
 
 ROOT = Path(__file__).resolve().parent
 SDK = ROOT / 'Panthera-HT_SDK/panthera_python'
@@ -81,7 +82,7 @@ def preflight(settings, active, roles):
     return devices, configs
 
 
-def snapshot(robot, max_age):
+def snapshot(robot, max_age, feedback_times=None):
     states = robot.get_current_state() + [robot.get_current_state_gripper()]
     now = time.time()
     if len(states) != 7 or [s.ID for s in states] != list(range(1, 8)):
@@ -94,6 +95,8 @@ def snapshot(robot, max_age):
             raise RuntimeError(f'电机 {s.ID} 状态超时：{now - s.time:.3f}s')
         if s.fault:
             raise RuntimeError(f'电机 {s.ID} 故障码：{s.fault}')
+    if feedback_times is not None:
+        feedback_times.extend(float(s.time) for s in states)
     return values
 
 
@@ -160,6 +163,14 @@ def shutdown(robots):
 
 
 def run_loop(leader, follower, settings, devices, duration):
+    publisher = Publisher()
+    try:
+        return _run_loop(leader, follower, settings, devices, duration, publisher)
+    finally:
+        publisher.close()
+
+
+def _run_loop(leader, follower, settings, devices, duration, publisher):
     period = 1 / settings['frequency_hz']
     limit = np.array(settings['torque_limits_nm'])
     kp, kd = np.array(settings['joint_kp']), np.array(settings['joint_kd'])
@@ -188,7 +199,8 @@ def run_loop(leader, follower, settings, devices, duration):
             if not Path(settings[role]).exists() or Path(settings[role]).resolve() != dev:
                 raise RuntimeError(f'{role} USB 连接发生变化')
         l = snapshot(leader, settings['state_timeout_s'])
-        f = snapshot(follower, settings['state_timeout_s'])
+        feedback_times = []
+        f = snapshot(follower, settings['state_timeout_s'], feedback_times)
         validate_positions(leader, l[:, 0])
         validate_positions(follower, f[:, 0])
         desired = np.clip(l[:, 0], lower, upper)
@@ -214,6 +226,7 @@ def run_loop(leader, follower, settings, devices, duration):
             raise RuntimeError('主臂夹爪命令被拒绝')
         if not follower.gripper_control_MIT(float(target[6]), float(target_velocity[6]), 0, 4.0, 0.4):
             raise RuntimeError('从臂夹爪命令被拒绝')
+        publisher.send(f, feedback_times, action=target, leader_position=l[:, 0])
         if elapsed - logged >= 0.05:
             row = dict(t=elapsed, wall_time=time.time(), leader=l.tolist(), follower=f.tolist(),
                        desired=desired.tolist(), target=target.tolist(), target_velocity=target_velocity.tolist(),
@@ -322,6 +335,10 @@ def worker(args, settings):
         if args.gravity_observe:
             gravity_observation(robots['leader'], settings, devices['leader'])
             return
+        if args.reset_target:
+            from reset_motion import run_reset
+            run_reset(robots, settings, devices, args.reset_target)
+            return
         run_loop(robots['leader'], robots['follower'], settings, devices, args.duration)
     finally:
         (RUNTIME / 'cleanup').touch()
@@ -347,6 +364,8 @@ def supervise(args):
     interrupted = False
     try:
         while child.poll() is None:
+            if args.owner_pid is not None and os.getppid() != args.owner_pid:
+                raise RuntimeError('页面采集服务已退出，停止遥操作')
             check_worker_health(started)
             time.sleep(0.05)
     except KeyboardInterrupt:
@@ -369,15 +388,17 @@ def main():
     mode.add_argument('--state', action='store_true', help='连接 SDK 读取状态，退出时发送制动')
     mode.add_argument('--gravity-observe', action='store_true', help='单独主臂，8 秒手扶重力补偿观察')
     mode.add_argument('--sample', action='store_true', help='手扶主臂静态采样 8 秒；不施加重力补偿')
+    mode.add_argument('--reset-target', type=Path, help='回到指定 episode 的起始姿态')
     parser.add_argument('--role', choices=['both', 'leader', 'follower'], default='both')
     parser.add_argument('--duration', type=float, help='遥操作自动结束秒数')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--owner-pid', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.sample and args.role != 'leader':
         parser.error('--sample 必须使用 --role leader')
     if args.gravity_observe and args.role != 'leader':
         parser.error('--gravity-observe 必须使用 --role leader')
-    if args.role != 'both' and not (args.check or args.state or args.sample or args.gravity_observe):
+    if args.role != 'both' and not (args.check or args.state or args.sample or args.gravity_observe or args.reset_target):
         parser.error('遥操作必须同时使用主从两臂')
     if args.duration is not None and (not np.isfinite(args.duration) or args.duration <= 0):
         parser.error('--duration 必须为正数')

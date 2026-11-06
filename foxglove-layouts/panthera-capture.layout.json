@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "content": {
+    "type": "split",
+    "direction": "column",
+    "items": [
+      {
+        "proportion": 8,
+        "content": {
+          "type": "split",
+          "direction": "row",
+          "items": [
+            {
+              "proportion": 1,
+              "content": {
+                "type": "panel",
+                "panelType": "Image",
+                "config": {
+                  "imageMode": {
+                    "imageTopic": "/camera/color/image",
+                    "imageSchemaName": "foxglove.CompressedImage"
+                  }
+                },
+                "title": "RealSense RGB",
+                "version": 1
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "split",
+                "direction": "column",
+                "items": [
+                  {
+                    "proportion": 3,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#4c9aff",
+                            "label": "Joint 1",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[0]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#ff8b52",
+                            "label": "Joint 2",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[1]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#56d6a0",
+                            "label": "Joint 3",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[2]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#bf8bff",
+                            "label": "Joint 4",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[3]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#ffd166",
+                            "label": "Joint 5",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[4]",
+                            "timestampMethod": "receiveTime"
+                          },
+                          {
+                            "enabled": true,
+                            "color": "#ee6c9e",
+                            "label": "Joint 6",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[5]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "top",
+                        "showPlotValuesInLegend": true,
+                        "showXAxisLabels": true,
+                        "showYAxisLabels": true,
+                        "xAxisVal": "timestamp",
+                        "timeRange": "latest",
+                        "xAxisLabel": "Time",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "Angle (rad)",
+                        "followingViewWidth": 20,
+                        "showYAxisGridLines": true
+                      },
+                      "title": "Follower joints — radians",
+                      "version": 1
+                    }
+                  },
+                  {
+                    "proportion": 1,
+                    "content": {
+                      "type": "panel",
+                      "panelType": "Plot",
+                      "config": {
+                        "paths": [
+                          {
+                            "enabled": true,
+                            "color": "#a4b2c5",
+                            "label": "Gripper",
+                            "showLine": true,
+                            "value": "/follower/joint_states.position[6]",
+                            "timestampMethod": "receiveTime"
+                          }
+                        ],
+                        "showLegend": true,
+                        "legendDisplay": "top",
+                        "showPlotValuesInLegend": true,
+                        "showXAxisLabels": true,
+                        "showYAxisLabels": true,
+                        "xAxisVal": "timestamp",
+                        "timeRange": "latest",
+                        "xAxisLabel": "Time",
+                        "timeWindowMode": "sliding",
+                        "yAxisLabel": "Angle (rad)",
+                        "followingViewWidth": 20,
+                        "showYAxisGridLines": true
+                      },
+                      "title": "Gripper — radians",
+                      "version": 1
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "proportion": 1,
+        "content": {
+          "type": "split",
+          "direction": "row",
+          "items": [
+            {
+              "proportion": 1,
+              "content": {
+                "type": "panel",
+                "panelType": "ServiceCall",
+                "config": {
+                  "serviceName": "/capture/start",
+                  "requestPayload": "{}",
+                  "buttonText": "Start",
+                  "buttonTooltip": "Start teleoperation and recording",
+                  "buttonColor": "#2e7d32",
+                  "editingMode": false,
+                  "timeoutSeconds": 10
+                },
+                "title": "Start",
+                "version": 1
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "panel",
+                "panelType": "ServiceCall",
+                "config": {
+                  "serviceName": "/capture/stop",
+                  "requestPayload": "{}",
+                  "buttonText": "Stop",
+                  "buttonTooltip": "Stop teleoperation; keep episode pending review",
+                  "buttonColor": "#b26a00",
+                  "editingMode": false,
+                  "timeoutSeconds": 10
+                },
+                "title": "Stop",
+                "version": 1
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "panel",
+                "panelType": "ServiceCall",
+                "config": {
+                  "serviceName": "/capture/save",
+                  "requestPayload": "{}",
+                  "buttonText": "Save",
+                  "buttonTooltip": "Stop if needed, accept episode and upload LeRobot dataset",
+                  "buttonColor": "#1565c0",
+                  "editingMode": false,
+                  "timeoutSeconds": 10
+                },
+                "title": "Save",
+                "version": 1
+              }
+            },
+            {
+              "proportion": 1,
+              "content": {
+                "type": "panel",
+                "panelType": "ServiceCall",
+                "config": {
+                  "serviceName": "/capture/discard",
+                  "requestPayload": "{}",
+                  "buttonText": "Discard",
+                  "buttonTooltip": "Stop if needed and reject episode; exclude from training and upload",
+                  "buttonColor": "#c62828",
+                  "editingMode": false,
+                  "timeoutSeconds": 10
+                },
+                "title": "Discard",
+                "version": 1
+              }
+            }
+          ]
+        }
+      },
+      {
+        "proportion": 2,
+        "content": {
+          "type": "panel",
+          "panelType": "RawMessages",
+          "config": {
+            "defaultExpanded": true,
+            "topicPath": "/capture/status",
+            "fontSize": 12
+          },
+          "title": "Capture / review / upload status",
+          "version": 1
+        }
+      }
+    ]
+  }
+}
