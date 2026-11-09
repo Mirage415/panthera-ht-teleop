@@ -1,189 +1,78 @@
-# Panthera-HT Teleoperation
+# Panthera-HT 双臂 Viser 控制台
 
-## 来源
+基于高擎官方 Panthera-HT SDK。两只臂均使用 Follower 硬件配置；网页控制和 A→B 主从遥操是运行模式。
 
-基于高擎官方 [Panthera-HT_SDK](https://github.com/HighTorque-Robotics/Panthera-HT_SDK)，参考 `panthera_python/scripts/5_teleop_control.py`，封装 Panthera-HT 主从遥操作。
+统一入口：**http://10.209.66.60:8082/**。启动仅连接反馈，不自动运动。
 
-## 启动
+## 页面
 
-在项目目录、环境和设备配置完成后运行：
+- **机械臂**：模式、开始、双臂复位；关节角度和高级参数折叠。
+- **相机**：主画布大图，彩色/深度切换，USB、帧率与帧龄。
+- **采集**：任务集/任务、开始采集、停止录制、保存/丢弃。任务管理、详情、历史回放默认折叠。
+- **数据**：A/B 六关节及夹爪，位置、速度、力矩曲线，实测/目标/参考、末端坐标。
+- **日志**：当前及历史故障、启动和停止原因。
 
-```bash
-just Teleop
-```
+全局“停止”停止机械臂，正在录制的文件随后结束。采集页“停止录制”只结束文件，机械臂控制继续。运行中可直接点“双臂复位”：六关节低速回零，完成后保持零位，不重设编码器、不自动合拢夹爪。
 
-`Ctrl+C` 停止，退出前请扶稳两臂。
+只保留回零，没有“本段起点”、单臂起点恢复或必须回位才能录下一段的流程。
 
-## RealSense / Foxglove 采集
+## 采集流程
 
-```bash
-uv pip install --python .venv/bin/python -r requirements-capture.txt
-just Preview                       # 常驻预览，在 Foxglove 页面点击开始/停止采集
-just Capture                       # 开始一个新 episode，Ctrl+C 结束
-# 页面点击 /capture/start 会自动启动 Teleop；终端手动遥操作仍可用：
-just Teleop
-```
+1. 在折叠的“任务管理”里创建任务集与精确任务描述，或选择已有任务。
+2. 相机和两臂反馈就绪后点“开始控制并录制”；若控制已运行，按钮为“开始录制”，沿用当前模式。
+3. 点“停止录制”，或直接“保存/丢弃”。保存保留本段；丢弃仅标记排除，不删除原始文件。
+4. 处理完上一段即可录下一段，不强制回零。
 
-打开 Foxglove，选择 **Open connection → Foxglove WebSocket**，连接
-`ws://127.0.0.1:8765`。添加 Image 面板，选择 `/camera/color/image`；添加 Plot
-面板，选择 `/follower/joint_states.position[0]` 至 `[5]`（六个关节），
-`position[6]` 为夹爪电机角度，单位均为 rad。Raw Messages 面板选择
-`/capture/status`，查看 `follower_live`、样本数、序号丢失数。
+采集开始时若处于待机/零位保持，会按机械臂页所选模式启动控制；请确认现场已准备好。未连接、旧页面请求、已断开的窗口不会启动。
 
-采集进程不打开机械臂串口。它接收现有 Teleop 控制循环每轮发送到本机 UDP
-9877 的实测反馈，目标频率 100 Hz，实际频率取决于控制循环。预览时仅有画面，状态显示“等待/断流”，不会伪造或重复填充关节数据。
-页面“开始”会自动启动 Teleop，等本次进程的反馈到达后录制；页面“停止”会结束两者。
-手动从终端启动的 Teleop 不归页面管理，仍需在它自己的终端停止。不要同时启动第二个采集实例（UDP 端口排他绑定）。
+每段保存在 `recordings/<UTC时间>/`：
 
-每次采集保存到 `recordings/<UTC时间>/`：
+- `data.mcap`：RGB JPEG、可选原始 16 位深度 PNG、两臂完整位置/速度/力矩与反馈时间、控制目标、相机设备时间信息。
+- `joints.csv`：B 臂六关节与夹爪、时间戳及可用的真实跟随目标；A/B 完整数据在 MCAP 中。
+- `metadata.json`：任务快照、相机参数、时间策略、样本/缺口统计、完成及审核状态。
 
-- `data.mcap`：JPEG RGB、关节实测位置/速度/力矩及反馈时间戳、采集状态；拖进 Foxglove 回放。
-- `joints.csv`：六个关节和夹爪的角度（rad）、速度（rad/s）、力矩（Nm）和反馈时间。
-- `metadata.json`：相机型号、序列号、内参、时间策略、样本数及完成标记。
+电机循环以约 100 Hz 非阻塞投递双臂数据；相机服务以配置帧率保留一致的 RGB/深度帧组。队列或相机缓冲溢出会记录序号缺口，不补造样本。图像与反馈使用主机纳秒时间，额外保留设备时间；没有硬件同步。相机采集延迟只在设备 global_time 可与主机时间比较时提供，不含编码/网络/显示。
 
-`just Capture --depth` 增加原始 16 位深度流 `/camera/depth/image`，
-深度米值 = 原始值 × metadata 中的 `depth_scale_m`。深度与 RGB 保留各自坐标系，
-未做对齐；当前不输出点云。`just Capture --joints-only` 仍实时显示图像，
-文件只记录关节及状态。`--duration 30` 可定时结束，`--serial SERIAL` 可选择相机。
-默认 RGB 为 640×480、30 fps，JPEG 质量 85。
+RGB 与深度保留各自光学坐标系，未做像素对齐。深度米值 = PNG 原始值 × metadata 的 depth_scale。相机提供彩色/深度内参与内部外参；机器人外参尚未标定，Viser 底座位置仍为展示布局。
 
-图像使用主机收到帧的 Unix 时间，关节使用读取 SDK 状态后的主机 Unix 时间，
-MCAP 和 CSV 保留纳秒整数。`/camera/frame_info` 额外保留设备时间及时间域，
-关节消息保留七个电机各自的 SDK 反馈时间。这里是软件时间关联，**不是硬件同步**；
-不假设 30 Hz 图像与约 100 Hz 关节一一对应，也不自动插值。
-UDP 非阻塞发送避免磁盘/图像处理阻塞控制循环；可能丢包，序号用于检测接收期间的缺口。
-MCAP 保存完整关节数组，CSV 的整数时间戳请用整数读取，避免浮点精度损失。
+主从模式记录 B 臂真实七轴目标，保留原 LeRobot 导出路径。网页控制记录双臂六关节参考/目标与夹爪反馈；因为夹爪没有位置目标，不伪造七轴动作，这类录制用于原始分析/回放，现有七轴 LeRobot 导出会拒绝缺失 action 的数据。
 
-点击停止或正常退出会完成 MCAP 索引；无关节样本或无 RGB 帧的录制标为不完整。
-服务退出时，若最后一段录制不完整则返回退出码 2。
-`complete` 只表示正常结束且两类数据都有，不表示没有中途断流；请同时检查状态和缺口。
-服务默认监听 `0.0.0.0:8765`。跨机器查看时，Foxglove 直接连接
-`ws://<采集机局域网IP>:8765`；两台电脑在同一 Tailscale 网络时也可使用采集机的 Tailscale IP。
-浏览器询问本地网络访问权限时允许。`0.0.0.0` 是监听地址，不是客户端连接地址。
-如需仅允许本机连接，使用 `--host 127.0.0.1`。
+历史与回放支持拖动时间进度，查看图像及双臂关节。支持旧 protobuf MCAP 与新的 JSON MCAP；回放不会控制实机。异常退出的未完成录制恢复为待审核且不完整，不能保存为训练数据。
 
-
-## 在 Foxglove 页面控制采集
-
-
-推荐使用 **Panthera Collection** 自定义面板，保留现有 Foxglove 连接、相机和关节 Plot。
-扩展源码位于 `foxglove-control/`；构建后的 `.foxe` 拖进 Foxglove，再 Add panel →
-Panthera Collection。也可由组织管理员上传至 Organization Settings → Extensions。
-不需要导入布局 JSON。
-
-面板内新建任务集、新建子任务（精确 prompt），然后按
-**Start → Stop（可选）→ Save / Discard → Reset → 下一段** 操作。
-任务目录和当前选择持久化到 `recordings/.collection-workflow.json`。
-录制时不可切换任务；每段 `metadata.json` 固定保存任务集 ID、名称、子任务 ID 和 prompt。
-LeRobot 的 task 文本取该段 prompt，来源清单保留任务归属；历史数据不重新标注。
-现有 WebSocket 地址、录制目录和 Hugging Face 仓库保持不变。
-
-**Reset 是实际自动回位**：新采集在第一个录入的关节样本中保存主从臂及夹爪姿态。
-Save/Discard 后分别点击 Reset Leader / Reset Follower，各自回到本轮实测起始姿态。
-单臂回位只连接所选机械臂，不要求 Teleop 运行或另一只臂在线；回位期间不录制，可用 Stop 中止。
-两臂完成状态分别保存，两者都完成后允许下一段。旧 `/capture/reset` 双臂回位接口仍可用。
-限位外不超过 0.01 rad 的起始读数投影到合法边界，运动目标始终位于原有关节限位内；超出此容差拒绝回位。
-回位状态与错误单独通过 `reset_state` / `reset_error` / `reset_role` 输出。
-缺少起始姿态的历史 episode 不能自动回位。回位走同一个 supervisor、进程锁、端口预检、
-反馈/故障检查、心跳和 watchdog；关节参考速度最多 0.35 rad/s、夹爪 0.5 rad/s，
-跟踪误差超过 0.3 rad（或原配置更小阈值）停止，45 秒未收敛也停止。
-全部轴误差 ≤0.04 rad 且速度 ≤0.08 rad/s 持续 0.5 秒才确认完成。
-成功后退出运动进程，沿用现有阻尼制动，并不持续位置保持；请承托重力负载。
-Reset 不会自动重摆场景物体。未完成回位时不能 Start 下一段。
-
-面板显示 Teleop 状态、follower 反馈新鲜度、相机帧率、帧龄，以及估计的
-**相机 → 采集机延迟**。延迟仅使用 RealSense `global_time` 映射到主机时钟的帧时间，
-不包含网络、JPEG 编码或浏览器渲染；时间域不可比较或读数异常时显示不可用。
-新控制接口 `/capture/command` 使用动作及状态 revision，拒绝旧页面/旧状态的动作；
-Stop 即使在状态过期时仍可发送。原有单独 Service Call 接口继续保留。
-
-
-启动一次 `just Preview`（也可用 `just Foxglove`），保持服务运行。
-连接后，在当前布局添加四个 **Service Call** 面板：
-
-| 设置 | Start | Stop | Save | Discard / Reject |
-| --- | --- | --- | --- | --- |
-| Service name | `/capture/start` | `/capture/stop` | `/capture/save` | `/capture/discard` |
-| Request | `{}` | `{}` | `{}` | `{}` |
-| Button → Title | Start | Stop | Save | Discard |
-| Timeout | 10 秒 | 10 秒 | 10 秒 | 10 秒 |
-
-Start 启动遥操作及录制；Stop 停止并暂存待审核；Save 保留、转换并上传；Discard 排除当前 episode。
-Save 和 Discard 可在录制中直接点击，会先停止遥操作和关闭文件。
-Discard 为可恢复的本地标记，不删除原始文件，但不会进入训练集或上传。
-已经 Save 的 episode 不能再通过 Discard 撤销，以免误改正在上传或已发布的数据。
-
-配置好后可关闭 **Editing mode**，面板只显示按钮；首次使用建议保持开启，
-直接查看响应中的 `ok`、`message` 和 `episode_path`。将按钮放在 Image 面板旁，保存布局。
-服务由 Foxglove SDK 原生提供，不需要额外网页、插件或 HTTP 端口。
-
-再添加 **Raw Messages** 面板，topic 选择 `/capture/status`，实时显示：
-
-- `recording` / `recording_state`：是否正在录制（idle / recording / error）。
-- `elapsed_s`：当前 episode 时长。
-- `episode_statistics`：当前 episode 的图像、关节样本数和序号缺口。
-- `episode_path`：正在保存的目录（采集机本地路径）。
-- `last_episode_path` / `last_episode_complete`：上一段文件位置及完成标记。
-- `camera_live` / `follower_live`：数据是否在最近 0.5 秒内更新。
-- `recording_error`：写入或关闭文件失败的信息。
-- `teleop_state`：idle / starting / running / stopping / error。
-- `teleop_error` / `teleop_log`：启动失败或异常原因以及本机日志路径。
-- `review_status` / `pending_review`：recording / pending / saved / discarded，以及是否等待选择。
-- `upload_state` / `upload_error` / `upload_url`：上传状态、错误和 Hugging Face 链接。
-- `upload_pending` / `upload_completed` / `upload_failed`：上传队列计数。
-
-页面开始按钮要求相机在线，随后自动启动现有 `teleop.py`（与 `just Teleop` 相同配置和预检）。
-按钮立即返回 `starting`，首次反馈就绪后状态自动变为 `running` 并开始保存，无需另开终端。
-完整流程是：现场准备好机械臂 → 页面点击开始 → 等待 `running` → 操作 → 页面点击停止。
-停止会请求 Teleop supervisor 退出，走原有制动和 watchdog 流程，再关闭数据文件；请在停止时扶稳两臂。
-启动最多等待 30 秒；预检失败、反馈断流或保存失败会停止本次进程并显示错误。
-只有本次子进程的反馈能触发自动录制，已有手动 Teleop 通过原有进程锁拒绝重复启动。
-页面不会自动接管或停止其他终端启动的 Teleop。
-每次开始生成新目录；重复点击开始不会拆分当前 episode，重复停止不会覆盖文件。
-点击停止后画面继续显示。先 Save 或 Discard 当前 episode，再 Start 下一段。
-未审核 episode 会跨服务重启保留；不完整的 episode 不能 Save 为训练数据，可 Discard。
-
-关闭网页或网络断开不会自动停止录制。重连后可查看状态并点击停止。
-`Ctrl+C` 退出采集服务时会停止其启动的 Teleop 并关闭当前 episode。
-服务异常会将当前 episode 标为不完整；Teleop supervisor 检测到所属采集服务退出时也会停止 worker。
-强制断电或 SIGKILL 无法保证 MCAP 索引完成；创建时 metadata 的完成标记为 false。
-
-`just Capture` 仍保留终端直接开始录制的行为（可先于 Teleop 启动），支持页面停止录制；若要之后用页面自动启动 Teleop，请先退出手动 Teleop。
-`--preview` 现在表示启动时只预览，收到页面开始命令后才保存。
-
-
-## Hugging Face / LeRobot
-
-目标仓库由本机 `hf-config.json` 指定。当前配置为 `Mirage415/nyush_panthera_test`，
-仓库保持用户原有可见性。新建仓库默认 private；现有仓库不修改可见性。
-只有 `review_status: saved` 且 `complete: true` 的 episode 会后台转换并上传。
-上传只包含 LeRobot 的 `data/`、`meta/`、`videos/`、说明及来源清单，不上传本机日志或凭据。
-原始 MCAP / CSV 保留在采集机。
-
-转码使用独立 `.venv-lerobot` 环境，避免升级机械臂 SDK 所依赖的 NumPy。
-重建环境：
+## 安装与启动
 
 ```bash
-uv venv --python 3.12 .venv-lerobot
-uv pip install --python .venv-lerobot/bin/python -r requirements-lerobot.lock.txt \
-  --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
+./setup.sh
+uv pip install --python .venv/bin/python -r requirements-viser.txt
+just Preview                    # 模型预览，测试录制目录独立，不连接电机
+just Viser                      # 实机控制台；不要与 just Teleop 同时运行
+just Check                      # 原串口/版本诊断
+just Test
 ```
 
-LeRobot 官方 writer 生成 30 FPS 数据，官方 reader 验证可读后才上传：
+相机服务由 `camera_service.py` 单独持有 RealSense USB。Viser 通过 HTTP 获取画面及有时间戳的帧组，不重复打开相机。NUC 上由 `realsense-web.service` 管理，8080 为相机服务，8082 为控制台。
 
-- `observation.images.realsense`：640×480 RGB 视频。
-- `observation.state`：六个 follower 关节及夹爪电机实测角度，rad。
-- `action`：经过限位、速度限制后实际下发的 follower 目标角度，rad。
-- `source.*_timestamp_ns`：原始主机时间戳，int64 纳秒。
+`panthera-viser.service` 不自动使能。通信丢失、控制进程异常或控制浏览器断开会停止；重新连接不会自动恢复运动。停止为阻尼制动，不保证重力支撑。
 
-RGB 按最近帧匹配（最大 35 ms）；状态及 action 使用最近一次已发生的样本
-（最大 50 ms / 80 ms），超限时不导出该 episode。不是硬件同步。
-历史无 action 字段的录制，只有找到时间匹配的原始遥操作 target 日志才可恢复；
-旧日志约 20 Hz，转换时保持最近指令，来源和最大匹配时间差写入 `source_episodes.json`。
-新采集直接在每轮已成功下发控制指令后记录目标。任务文本暂用通用 `Panthera teleoperation`，
-不是人工任务标注；可在 `hf-config.json` 中修改 `task` 供之后保存的 episode 使用。
+## 导出与上传
 
-上传是独立后台进程，不阻塞画面或控制循环。失败保留本地文件，最多自动尝试三次，
-间隔至少 60 秒。可增加 Service Call 面板，服务 `/capture/upload_retry`，请求 `{}`，手动重试。
-队列保存在每段的 `upload.json`，转换详情在 `conversion.log`，服务重启后会继续处理。
-重复上传不会重复追加 episode；已有远端来源清单与本机不一致时拒绝覆盖。
+沿用 `hf-config.json`（已忽略）和 Hugging Face 登录。只有审核为 saved 且完整的数据进入原后台导出/上传队列；上传状态、失败信息和重试入口在采集页详情中。没有配置时只保存本地，不上传。
+
+LeRobot 使用独立 `.venv-lerobot` 和 `requirements-lerobot.lock.txt`，不修改机械臂环境的 NumPy ABI。`export_lerobot.py` 保留源时间戳和任务归属，检查对齐误差，失败不覆盖此前导出。
+
+## 代码边界
+
+- `viser_app.py`：场景、机械臂 UI、控制进程管理。
+- `viser_worker.py` / `viser_control.py`：SDK 循环、状态机与非阻塞采样。
+- `viser_collection.py` / `recording.py` / `mcap_io.py`：采集线程、文件生命周期、独立 MCAP 写入。
+- `viser_collection_ui.py` / `viser_playback.py`：简洁采集页面、只读历史回放。
+- `camera_service.py` / `viser_camera.py`：单一相机采集服务与画面展示。
+- `collection_workflow.py` / `hub_upload.py` / `export_lerobot.py`：任务、后台上传、训练导出。
+
+原外部可视化服务、前端扩展、布局文件和 SDK 依赖已移除；不再监听原来的 8765 端口。保留独立终端遥操及诊断功能，和 Viser 共用硬件排他锁。
+
+## 相机参数保存
+
+camera-settings.json 按设备序列号保存 RGB 设置（本机配置，Git 忽略）。相机服务每次启动或重新连接时加载，/api/status 的 color_options 返回加载后的实际读数。当前固定相机使用手动曝光 200、增益 64、自动白平衡；不复制到其他序列号的相机。
+
+首次部署可复制 camera-settings.example.json 为 camera-settings.json，并将 YOUR_CAMERA_SERIAL 替换成实际相机序列号。

@@ -9,11 +9,11 @@ import time
 import unittest
 from unittest.mock import patch
 
-import foxglove
+from mcap_io import McapSink
 from mcap.reader import make_reader
 import numpy as np
 
-from capture import CSV_FIELDS, csv_row, validate_joint, joint_channel, camera_latency_ms
+from capture import CSV_FIELDS, csv_row, validate_joint, JOINT_SCHEMA, camera_latency_ms
 import pyrealsense2 as rs
 import telemetry
 
@@ -51,10 +51,9 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(float(saved['gripper_rad']), values[6, 0])
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'test.mcap'
-            context = foxglove.Context()
-            channel = joint_channel(context)
-            with foxglove.open_mcap(str(path), context=context):
-                channel.log(row, log_time=row['timestamp_ns'])
+            with_sink=McapSink(path)
+            with_sink.log('/follower/joint_states',row,row['timestamp_ns'],'panthera.JointState',JOINT_SCHEMA)
+            with_sink.close()
             with path.open('rb') as handle:
                 messages = list(make_reader(handle).iter_messages())
             self.assertEqual(len(messages), 1)

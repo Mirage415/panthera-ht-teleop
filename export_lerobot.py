@@ -8,7 +8,7 @@ import time
 import cv2
 import numpy as np
 from mcap.reader import make_reader
-from mcap_protobuf.decoder import DecoderFactory
+from mcap_io import decode_image
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 ROOT = Path(__file__).resolve().parent
@@ -18,7 +18,6 @@ FPS = 30
 
 def read_episode(folder):
     states, images, actions = [], [], []
-    decoder = DecoderFactory()
     with (folder / 'data.mcap').open('rb') as handle:
         for schema, channel, message in make_reader(handle).iter_messages(
                 topics=['/follower/joint_states', '/camera/color/image']):
@@ -29,8 +28,7 @@ def read_episode(folder):
                 if row.get('action_source') == 'follower_command_target':
                     actions.append((stamp, row['action']))
             else:
-                image = decoder.decoder_for(channel.message_encoding, schema)(message.data)
-                images.append((message.log_time, bytes(image.data)))
+                images.append((message.log_time, decode_image(schema, channel, message)))
     source = 'follower_command_target'
     if not actions:
         recovered = folder / 'actions-recovered.jsonl'

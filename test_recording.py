@@ -9,10 +9,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-import foxglove
 from mcap.reader import make_reader
 
-from recording import Recorder, RecordingControl
+from recording import Recorder
 
 
 class RecordingTests(unittest.TestCase):
@@ -20,14 +19,12 @@ class RecordingTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.context = foxglove.Context()
-        self.channel = foxglove.Channel('/follower/joint_states', message_encoding='json', context=self.context)
         self.stats = dict(rgb_frames=0, joint_samples=0)
-        self.recorder = Recorder(self.root, {}, ['q'], context=self.context)
+        self.recorder = Recorder(self.root, {}, ['q'])
         self.addCleanup(lambda: self.recorder.stop(self.stats))
 
     def sample(self, q):
-        self.channel.log({'q': q})
+        if self.recorder.active:self.recorder.writer.log('/follower/joint_states',{'q':q},time.time_ns())
         self.recorder.write_joint([q])
         self.stats['joint_samples'] += 1
         self.stats['rgb_frames'] += 1
@@ -73,37 +70,8 @@ class RecordingTests(unittest.TestCase):
         self.assertFalse(result['last_episode_complete'])
         self.assertIn('disk full', result['recording_error'])
 
-    def call(self, control, action, live):
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(control.handler(action), SimpleNamespace(encoding='json', payload=b'{}'))
-            deadline = time.monotonic() + 2
-            while control.queue.empty() and time.monotonic() < deadline:
-                time.sleep(.001)
-            control.drain(self.recorder, self.stats, live)
-            return json.loads(future.result(timeout=2))
-
-    def test_page_start_requires_live_streams(self):
-        control = RecordingControl()
-        result = self.call(control, 'start', dict(camera_live=True, follower_live=False))
-        self.assertFalse(result['ok'])
-        self.assertFalse(self.recorder.active)
-        self.assertEqual(list(self.root.iterdir()), [])
-        result = self.call(control, 'start', dict(camera_live=True, follower_live=True))
-        self.assertTrue(result['ok'])
-        self.assertTrue(result['recording'])
-        self.sample(1)
-        result = self.call(control, 'stop', dict(camera_live=True, follower_live=True))
-        self.assertTrue(result['last_episode_complete'])
-
-    def test_expired_start_never_runs_later(self):
-        control = RecordingControl(timeout=.01)
-        with self.assertRaisesRegex(RuntimeError, '超时'):
-            control.handler('start')(SimpleNamespace(encoding='json', payload=b'{}'))
-        control.drain(self.recorder, self.stats, dict(camera_live=True, follower_live=True))
-        self.assertFalse(self.recorder.active)
-
     def test_failed_open_does_not_leave_active_recording(self):
-        with patch('recording.foxglove.open_mcap', side_effect=OSError('cannot write')):
+        with patch('recording.McapSink', side_effect=OSError('cannot write')):
             with self.assertRaisesRegex(OSError, 'cannot write'):
                 self.recorder.start(self.stats)
         self.assertFalse(self.recorder.active)
@@ -117,7 +85,7 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue(self.recorder.has_pending)
         with self.assertRaisesRegex(ValueError, 'Save'):
             self.recorder.start(self.stats)
-        restored = Recorder(self.root, {}, ['q'], context=self.context)
+        restored = Recorder(self.root, {}, ['q'])
         self.assertTrue(restored.has_pending)
         self.assertTrue(restored.decide('discarded')['ok'])
         metadata = json.loads((Path(restored.last_path) / 'metadata.json').read_text())
@@ -125,15 +93,6 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue((Path(restored.last_path) / 'data.mcap').exists())
         self.assertFalse(restored.decide('saved')['ok'])
         self.assertFalse(Recorder(self.root, {}, ['q']).has_pending)
-
-    def test_save_button_closes_active_episode_and_accepts(self):
-        self.recorder.start(self.stats)
-        self.sample(1)
-        result = self.call(RecordingControl(), 'save', dict(camera_live=True, follower_live=True))
-        self.assertTrue(result['ok'])
-        self.assertFalse(result['recording'])
-        self.assertEqual(result['review_status'], 'saved')
-        self.assertFalse(self.recorder.decide('discarded')['ok'])
 
     def test_cannot_save_incomplete_episode(self):
         self.recorder.start(self.stats)

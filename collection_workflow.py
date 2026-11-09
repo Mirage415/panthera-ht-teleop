@@ -1,6 +1,6 @@
 """Persistent task catalogs and episode gates, inspired by embodied-ops.
 
-Hardware motion remains in TeleopSession; this module never opens a motor.
+This module only manages tasks; zero homing belongs to the Viser controller.
 """
 from copy import deepcopy
 import json
@@ -41,8 +41,6 @@ class CollectionWorkflow:
             stage = 'recording'
         elif recorder.has_pending:
             stage = 'review'
-        elif self.data['needs_reset']:
-            stage = 'reset_required'
         elif not self.selection():
             stage = 'needs_task'
         else:
@@ -69,9 +67,7 @@ class CollectionWorkflow:
         return dict(workflow_phase=stage, workflow_revision=f'{self.generation}:{self.revision}',
                     task_catalogs=deepcopy(self.data['catalogs']), selected_task=self.selection(),
                     selected_catalog_id=self.data['selected_catalog'],
-                    task_episode_counts=self._counts.copy(), reset_mode='automatic',
-                    reset_available=bool(self.data.get('reset_pose')),
-                    reset_completed_roles=self.data.get('reset_completed_roles', []))
+                    task_episode_counts=self._counts.copy(), reset_mode='zero_only')
 
     def check_revision(self, value, recorder, teleop):
         if value != self.state(recorder, teleop)['workflow_revision']:
@@ -88,7 +84,7 @@ class CollectionWorkflow:
     def configure(self, action, payload, recorder, teleop):
         stage = self.state(recorder, teleop)['workflow_phase']
         if stage not in ('ready', 'needs_task'):
-            raise ValueError('先完成当前 episode 的 Save / Discard 和 Reset，再切换任务')
+            raise ValueError('先保存或丢弃当前录制，再切换任务')
         if action == 'catalog_create':
             name = self.text(payload.get('name'), '任务集名称', 120)
             if any(c['name'] == name for c in self.data['catalogs']):
@@ -119,44 +115,6 @@ class CollectionWorkflow:
 
     def before_start(self, recorder, teleop):
         if self.state(recorder, teleop)['workflow_phase'] != 'ready':
-            raise ValueError('请先选择子任务，并完成上一段的 Save / Discard → Reset')
+            raise ValueError('请先选择子任务，并保存或丢弃上一段录制')
         recorder.template['task'] = deepcopy(self.selection())
         self.persist()
-
-    def reset(self, recorder, teleop, role='both'):
-        if role not in ('leader', 'follower', 'both'):
-            raise ValueError('未知机械臂')
-        if recorder.active or recorder.has_pending or (teleop and teleop.phase in ('starting', 'running', 'stopping', 'resetting')):
-            raise ValueError('先停止 Teleop 并 Save / Discard，再 Reset')
-        if not self.data.get('reset_pose') or teleop is None:
-            raise ValueError('本轮没有完整的主从臂起始姿态，不能自动回位')
-        completed = set(self.data.get('reset_completed_roles', []))
-        completed.difference_update(('leader', 'follower') if role == 'both' else (role,))
-        self.data['reset_completed_roles'] = sorted(completed)
-        self.data['needs_reset'] = True
-        self.persist()
-        return teleop.reset(self.data['reset_pose'], role=role)
-
-    def remember_episode(self, recorder):
-        if (recorder.last_result and recorder.last_result.get('initial_pose')
-                and recorder.last_result['initial_pose'] != self.data.get('reset_pose')):
-            self.data['reset_pose'] = deepcopy(recorder.last_result['initial_pose'])
-            self.data['needs_reset'] = True
-            self.data['reset_completed_roles'] = []
-            self.persist()
-
-    def tick(self, teleop, recorder):
-        pose = (recorder.meta if recorder.active else recorder.last_result) or {}
-        if pose.get('initial_pose') and pose['initial_pose'] != self.data.get('reset_pose'):
-            self.data['reset_pose'] = deepcopy(pose['initial_pose'])
-            self.data['needs_reset'] = True
-            self.data['reset_completed_roles'] = []
-            self.persist()
-        if teleop.reset_completed:
-            completed = set(self.data.get('reset_completed_roles', []))
-            role = getattr(teleop, 'reset_role', 'both')
-            completed.update(('leader', 'follower') if role == 'both' else (role,))
-            self.data['reset_completed_roles'] = sorted(completed)
-            self.data['needs_reset'] = not {'leader', 'follower'}.issubset(completed)
-            self.persist()
-            teleop.reset_completed = False

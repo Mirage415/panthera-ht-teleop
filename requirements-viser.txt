@@ -1,0 +1,6 @@
+# Install in the robot environment; keep its NumPy ABI unchanged.
+numpy==1.26.4
+viser==1.1.1
+yourdfpy==0.0.60
+
+-r requirements-capture.txt

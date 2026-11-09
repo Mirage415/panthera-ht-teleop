@@ -16,3 +16,4 @@ install-uv.sh
 just.tar.gz
 .env
 .env.*
+camera-settings.json

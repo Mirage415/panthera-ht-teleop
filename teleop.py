@@ -245,6 +245,52 @@ def _run_loop(leader, follower, settings, devices, duration, publisher):
         time.sleep(max(0, period - (time.monotonic() - now)))
 
 
+def home_arms(robots, settings, devices):
+    """Slowly move six arm joints to existing zero; never change calibration."""
+    speed = 0.08
+    caps = np.array([8., 15., 15., 8., 3., 1.])
+    targets = {}
+    for role, robot in robots.items():
+        values = snapshot(robot, settings['state_timeout_s'])
+        validate_positions(robot, values[:, 0])
+        if np.max(np.abs(values[:6, 0])) > 0.8:
+            raise RuntimeError(f'{role} 距零位较远，拒绝自动直线回零')
+        targets[role] = values[:6, 0].copy()
+    print('两臂低速回零开始：0.08 rad/s，仅六个关节，保持现有零位标定。', flush=True)
+    start = last = time.monotonic()
+    settled = None
+    while time.monotonic() - start < 25:
+        now = time.monotonic()
+        dt = now - last
+        if dt > 0.1:
+            raise RuntimeError('回零控制循环延迟超过 100ms')
+        last = now
+        ready = True
+        for role, robot in robots.items():
+            if not Path(settings[role]).exists() or Path(settings[role]).resolve() != devices[role]:
+                raise RuntimeError(f'{role} 回零时 USB 连接变化')
+            values = snapshot(robot, settings['state_timeout_s'])
+            validate_positions(robot, values[:, 0])
+            if np.max(np.abs(values[:6, 1])) > 1.0:
+                raise RuntimeError(f'{role} 回零实际速度超限')
+            if np.any(np.abs(values[:6, 2]) > caps + 0.5):
+                raise RuntimeError(f'{role} 回零反馈力矩超限')
+            targets[role] = bounded_target(targets[role], np.zeros(6), speed, min(max(dt, .001), .02))
+            if np.max(np.abs(targets[role] - values[:6, 0])) > 0.15:
+                raise RuntimeError(f'{role} 回零跟踪误差过大')
+            target = np.clip(targets[role], robot.joint_limits['lower'], robot.joint_limits['upper'])
+            if not robot.Joint_Pos_Vel(target, np.full(6, speed), caps):
+                raise RuntimeError(f'{role} 回零指令被拒绝')
+            ready = ready and np.max(np.abs(targets[role])) < 1e-6 and np.max(np.abs(values[:6, 0])) < .02
+        (RUNTIME / 'heartbeat').touch()
+        settled = (now if settled is None else settled) if ready else None
+        if settled is not None and now - settled >= 1.0:
+            print('两臂六关节已回零（误差 < 0.02 rad），开始持续遥操。', flush=True)
+            return
+        time.sleep(max(0, .01 - (time.monotonic() - now)))
+    raise RuntimeError('两臂未在 25 秒内回零，停止；不会继续遥操')
+
+
 def gravity_observation(robot, settings, device):
     """Eight-second supported observation; no position servo or parameter fitting."""
     destination = ROOT / 'calibration'
@@ -332,12 +378,10 @@ def worker(args, settings):
             return
         (RUNTIME / 'heartbeat').touch()
         (RUNTIME / 'running').touch()
+        if args.home_first:
+            home_arms(robots, settings, devices)
         if args.gravity_observe:
             gravity_observation(robots['leader'], settings, devices['leader'])
-            return
-        if args.reset_target:
-            from reset_motion import run_reset
-            run_reset(robots, settings, devices, args.reset_target)
             return
         run_loop(robots['leader'], robots['follower'], settings, devices, args.duration)
     finally:
@@ -388,17 +432,19 @@ def main():
     mode.add_argument('--state', action='store_true', help='连接 SDK 读取状态，退出时发送制动')
     mode.add_argument('--gravity-observe', action='store_true', help='单独主臂，8 秒手扶重力补偿观察')
     mode.add_argument('--sample', action='store_true', help='手扶主臂静态采样 8 秒；不施加重力补偿')
-    mode.add_argument('--reset-target', type=Path, help='回到指定 episode 的起始姿态')
     parser.add_argument('--role', choices=['both', 'leader', 'follower'], default='both')
     parser.add_argument('--duration', type=float, help='遥操作自动结束秒数')
+    parser.add_argument('--home-first', action='store_true', help='六关节低速回到现有零位后开始遥操')
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--owner-pid', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.home_first and (args.role != 'both' or args.check or args.state or args.sample or args.gravity_observe):
+        parser.error('--home-first 仅用于两臂遥操')
     if args.sample and args.role != 'leader':
         parser.error('--sample 必须使用 --role leader')
     if args.gravity_observe and args.role != 'leader':
         parser.error('--gravity-observe 必须使用 --role leader')
-    if args.role != 'both' and not (args.check or args.state or args.sample or args.gravity_observe or args.reset_target):
+    if args.role != 'both' and not (args.check or args.state or args.sample or args.gravity_observe):
         parser.error('遥操作必须同时使用主从两臂')
     if args.duration is not None and (not np.isfinite(args.duration) or args.duration <= 0):
         parser.error('--duration 必须为正数')

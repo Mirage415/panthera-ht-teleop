@@ -30,13 +30,12 @@ GravityObserve:
 Test:
     @"{{justfile_directory()}}/.venv/bin/python" -m unittest -v
 
-# 启动预览服务，可在 Foxglove 页面开始/停止采集，不启动机械臂
+# Viser 模型预览，不连接机械臂
 Preview *args:
-    @"{{justfile_directory()}}/.venv/bin/python" -u "{{justfile_directory()}}/capture.py" --preview "$@"
+    @"{{justfile_directory()}}/.venv/bin/python" -u "{{justfile_directory()}}/viser_app.py" "$@"
 
-# 采集 RGB + follower 关节角；另一个终端运行 Teleop
-Capture *args:
-    @"{{justfile_directory()}}/.venv/bin/python" -u "{{justfile_directory()}}/capture.py" "$@"
+# 综合控制台：控制、图像、任务采集、录制、回放
+Viser *args:
+    @"{{justfile_directory()}}/.venv/bin/python" -u "{{justfile_directory()}}/viser_app.py" --hardware "$@"
 
-# 常驻 Foxglove 预览与页面采集服务
-alias Foxglove := Preview
+alias Capture := Viser

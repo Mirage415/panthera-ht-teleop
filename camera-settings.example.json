@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "devices": {
+    "YOUR_CAMERA_SERIAL": {
+      "color_options": {
+        "enable_auto_exposure": 0,
+        "exposure": 200,
+        "gain": 64,
+        "enable_auto_white_balance": 1
+      }
+    }
+  }
+}
